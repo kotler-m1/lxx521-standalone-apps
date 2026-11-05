@@ -1,0 +1,10 @@
+
+# Standalone local build data
+.gradle/
+**/build/
+local.properties
+
+# Temporary source backups
+*.before-*
+*.bak
+**/.gradle/

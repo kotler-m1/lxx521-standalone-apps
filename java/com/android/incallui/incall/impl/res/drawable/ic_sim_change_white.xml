@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animation-list android:oneshot="true"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_00" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_01" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_02" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_03" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_04" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_05" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_06" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_07" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_08" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_09" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_10" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_11" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_12" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_13" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_14" />
+    <item android:duration="33" android:drawable="@drawable/ic_sim_change_vd_theme_24_00" />
+</animation-list>

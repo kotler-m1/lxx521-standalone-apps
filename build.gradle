@@ -1,0 +1,211 @@
+plugins {
+    id 'com.android.application' version '8.6.1'
+    id 'com.google.protobuf' version '0.9.4'
+}
+
+def bpText = file('Android.bp').getText('UTF-8')
+
+def extraPackages = (
+    bpText =~ /"--extra-packages\s+([^"]+)"/
+).collect { match -> match[1] }
+
+def resourceDirsMatch = (
+    bpText =~ /(?s)resource_dirs:\s*\[(.*?)\]/
+)
+
+if (!resourceDirsMatch.find()) {
+    throw new GradleException("resource_dirs missing from Android.bp")
+}
+
+def dialerResDirs = (
+    resourceDirsMatch.group(1) =~ /"([^"]+)"/
+).collect { match -> file(match[1]) }
+
+def stagedResourceDir =
+    layout.buildDirectory.dir('generated/standaloneRes/res')
+
+def stageDialerResources = tasks.register(
+    'stageDialerResources', Exec
+) {
+    inputs.file(file('Android.bp'))
+    inputs.file(file('tools/merge_android_resources.py'))
+    inputs.files(dialerResDirs)
+    outputs.dir(stagedResourceDir)
+
+    commandLine(
+        'python3',
+        file('tools/merge_android_resources.py').absolutePath,
+        '--bp',
+        file('Android.bp').absolutePath,
+        '--output',
+        stagedResourceDir.get().asFile.absolutePath
+    )
+}
+
+// Stage protos outside the repository root. Their imports originally
+// include the leading "java/" path, which is removed in the staged copies.
+def stagedProtoDir = layout.buildDirectory.dir('generated/standaloneProto')
+
+def stageDialerProtoTask = tasks.register('stageDialerProto', Copy) {
+    from('java') {
+        include '**/*.proto'
+        filter { line ->
+            line.replace('import "java/', 'import "')
+        }
+    }
+    into(stagedProtoDir)
+}
+
+android {
+    namespace 'com.android.dialer'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.infinityx.dialer'
+        minSdk 29
+        targetSdk 35
+
+        versionCode 1
+        versionName '0.1.0-standalone'
+    }
+
+    buildFeatures {
+        aidl true
+        buildConfig true
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'standalone/AndroidManifest.xml'
+
+            java {
+                srcDirs = ['java', 'standalone-shims']
+                exclude 'com/android/dialer/rootcomponentgenerator/**'
+            }
+
+            aidl.srcDirs = ['java']
+            res.srcDirs = [stagedResourceDir.get().asFile]
+
+            proto {
+                srcDir stagedProtoDir.get().asFile
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    aaptOptions {
+        additionalParameters =
+            ['--auto-add-overlay'] +
+            extraPackages.collectMany { pkg ->
+                ['--extra-packages', pkg]
+            }
+    }
+
+    packaging {
+        resources {
+            excludes += [
+                'META-INF/DEPENDENCIES',
+                'META-INF/AL2.0',
+                'META-INF/LGPL2.1'
+            ]
+        }
+    }
+
+    lint {
+        abortOnError false
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.25.3'
+    }
+
+    generateProtoTasks {
+        all().configureEach { task ->
+            task.dependsOn(stageDialerProtoTask)
+            task.builtins {
+                java {
+                    option 'lite'
+                }
+            }
+        }
+    }
+}
+
+
+// Resource staging must run before every Android Gradle task
+// that discovers, generates, merges, or processes these resources.
+tasks.configureEach {
+    if (
+        name ==~ /(?:generate|merge|process).*Resources/ ||
+        name ==~ /map.*SourceSetPaths/ ||
+        name ==~ /extract.*DeepLinks.*/
+    ) {
+        dependsOn(stageDialerResources)
+    }
+}
+
+dependencies {
+    // AndroidX
+    implementation 'androidx.annotation:annotation:1.8.2'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.cardview:cardview:1.0.0'
+    implementation 'androidx.collection:collection:1.4.5'
+    implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
+    implementation 'androidx.dynamicanimation:dynamicanimation:1.0.0'
+    implementation 'androidx.exifinterface:exifinterface:1.3.7'
+    implementation 'androidx.fragment:fragment:1.8.3'
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
+    implementation 'androidx.preference:preference:1.2.1'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.startup:startup-runtime:1.1.1'
+
+    // Material Components
+    implementation 'com.google.android.material:material:1.12.0'
+
+    // Dialer libraries
+    implementation 'com.google.dagger:dagger:2.51.1'
+    implementation 'com.google.guava:guava:33.2.1-android'
+    implementation 'com.google.errorprone:error_prone_annotations:2.26.1'
+    implementation 'com.google.auto.value:auto-value-annotations:1.11.0'
+    implementation 'com.google.protobuf:protobuf-javalite:3.25.3'
+    implementation 'com.googlecode.libphonenumber:libphonenumber:9.0.42'
+    implementation 'com.googlecode.libphonenumber:geocoder:3.42'
+    implementation 'com.android.volley:volley:1.2.1'
+    implementation 'org.apache.commons:commons-compress:1.26.2'
+    implementation 'commons-io:commons-io:2.16.1'
+    implementation 'javax.inject:javax.inject:1'
+    implementation 'com.google.code.findbugs:jsr305:3.0.2'
+
+    // Glide and generated code
+    implementation 'com.github.bumptech.glide:glide:4.16.0'
+
+    annotationProcessor 'com.google.auto.value:auto-value:1.11.0'
+    annotationProcessor 'com.google.dagger:dagger-compiler:2.51.1'
+    annotationProcessor 'com.github.bumptech.glide:compiler:4.16.0'
+    annotationProcessor project(':rootcomponentprocessor')
+
+    // JARs supplied by the Dialer source
+    implementation files(
+        'prebuilts/apache-mime4j-core-0.8.9.jar',
+        'prebuilts/apache-mime4j-dom-0.8.9.jar'
+    )
+}
+
+// The old Soong build also exposes the optional Apache HTTP legacy API.
+// Use its SDK JAR for compilation if present.
+def androidHome = System.getenv('ANDROID_HOME')
+if (androidHome != null) {
+    def legacyHttpJar = file(
+        "${androidHome}/platforms/android-35/optional/org.apache.http.legacy.jar"
+    )
+
+    if (legacyHttpJar.exists()) {
+        dependencies.add('compileOnly', files(legacyHttpJar))
+    }
+}

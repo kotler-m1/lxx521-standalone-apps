@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="infinity_call_recording_accessibility_label">
+        Infinity Call Recording
+    </string>
+    <string name="infinity_call_recording_accessibility_description">
+        Allows Infinity Dialer to capture microphone audio when you explicitly
+        start call recording. This service does not inspect screen contents or
+        perform gestures. Speakerphone may be needed to hear the other caller
+        acoustically. Obtain the required consent before recording.
+    </string>
+</resources>

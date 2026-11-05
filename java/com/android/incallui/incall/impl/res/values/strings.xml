@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Copyright (C) 2017 The Android Open Source Project
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~      http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License
+  -->
+<resources>
+
+  <!-- Button shown during a phone call to upgrade to video.
+     [CHAR LIMIT=12] -->
+  <string name="incall_label_videocall">Video call</string>
+
+  <!-- Button shown during a phone call to upgrade to Real-time Text.
+     [CHAR LIMIT=12] -->
+  <string name="incall_label_rttcall">RTT</string>
+
+  <!-- Button shown during a phone call to put the call on hold.
+     [CHAR LIMIT=12] -->
+  <string name="incall_label_hold">Hold</string>
+
+  <!-- Button shown during a phone call to add a new phone call.
+     [CHAR LIMIT=12] -->
+  <string name="incall_label_add_call">Add call</string>
+
+  <!-- Button shown during a phone call to mute the microphone.
+     [CHAR LIMIT=12] -->
+  <string name="incall_label_mute">Mute</string>
+
+  <!-- Button shown during a phone call to show the dialpad.
+     [CHAR LIMIT=12] -->
+  <string name="incall_label_dialpad">Keypad</string>
+
+  <!-- Talkback text for speaker button status. [CHAR LIMIT=12] -->
+  <string name="incall_talkback_speaker_on">, is on</string>
+
+  <!-- Talkback text for speaker button status. [CHAR LIMIT=12] -->
+  <string name="incall_talkback_speaker_off">, is Off</string>
+
+  <!-- Button shown during a phone to merge two ongoing calls.
+     [CHAR LIMIT=12] -->
+  <string name="incall_label_merge">Merge</string>
+
+  <!-- Button shown during a phone to show the manage conference call screen.
+     [CHAR LIMIT=12] -->
+  <string name="incall_label_manage">Manage</string>
+
+  <string name="a11y_description_incall_label_manage_content">Manage callers</string>
+
+  <!-- Button shown during a phone to swap from the foreground call to the background call.
+     [CHAR LIMIT=12] -->
+  <string name="incall_label_swap">Swap</string>
+
+
+  <!-- Button shown during a call with a multi-SIM device to hang up and call with the other SIM
+     instead. [CHAR LIMIT=12] -->
+  <string name="incall_label_swap_sim">Change SIM</string>
+
+  <!-- Used to inform the user that the note associated with an outgoing call has been sent.
+       [CHAR LIMIT=32] -->
+  <string name="incall_note_sent">Note sent</string>
+
+    <string name="comms_gm_sim_change_path_arrows">M11.7,16.8c-2.2-0.2-4-2-4-4.3c0-0.8,0.2-1.6,0.7-2.3l0.2-0.3L9.7,11l-0.1,0.2c-0.2,0.4-0.3,0.8-0.3,1.3c0,1.4,1.1,2.5,2.4,2.7v-1.9l2.7,2.7l-2.7,2.7V16.8z M14.3,14l0.1-0.2c0.2-0.4,0.3-0.8,0.3-1.3c0-1.4-1.1-2.5-2.4-2.7v1.9L9.6,9l2.7-2.7v1.9c2.2,0.2,4,2,4,4.3c0,0.8-0.2,1.6-0.7,2.3l-0.2,0.3L14.3,14z</string>
+
+    <string name="comms_gm_sim_change_path_sim">M18,2h-8L4,8v12c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2V4C19.9,2.9,19,2,18,2z M18,4v16H6V8.8L10.8,4H18z</string>
+
+</resources>
