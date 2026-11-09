@@ -35,4 +35,6 @@
 
   <!-- Length of dialpad's shadows in dialer. -->
   <dimen name="shadow_length">10dp</dimen>
+  <dimen name="dialpad_key_margin_right">5dp</dimen>
+  <dimen name="dialpad_key_number_width">20sp</dimen>
 </resources>

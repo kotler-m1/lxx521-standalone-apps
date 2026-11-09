@@ -3,6 +3,18 @@ plugins {
     id 'com.google.protobuf' version '0.9.4'
 }
 
+// Release signing credentials are stored outside this repository.
+def releaseSigningPropertiesFile =
+    rootProject.file('../sign-key/release-signing.properties')
+
+def releaseSigningProperties = new Properties()
+
+if (releaseSigningPropertiesFile.isFile()) {
+    releaseSigningPropertiesFile.withInputStream {
+        releaseSigningProperties.load(it)
+    }
+}
+
 def bpText = file('Android.bp').getText('UTF-8')
 
 def extraPackages = (
@@ -62,11 +74,37 @@ android {
 
     defaultConfig {
         applicationId 'com.infinityx.dialer'
-        minSdk 29
+        minSdk 35
         targetSdk 35
 
-        versionCode 1
-        versionName '0.1.0-standalone'
+        versionCode 3
+        versionName '1.0.0'
+    }
+
+    signingConfigs {
+        release {
+            if (releaseSigningPropertiesFile.isFile()) {
+                storeFile file(
+                    releaseSigningProperties.getProperty('storeFile')
+                )
+                storePassword releaseSigningProperties.getProperty('storePassword')
+                keyAlias releaseSigningProperties.getProperty('keyAlias')
+                keyPassword releaseSigningProperties.getProperty('keyPassword')
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+
+        release {
+            debuggable false
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
+        }
     }
 
     buildFeatures {
@@ -116,7 +154,7 @@ android {
     }
 
     lint {
-        abortOnError false
+        abortOnError true
     }
 }
 
@@ -140,6 +178,49 @@ protobuf {
 
 // Resource staging must run before every Android Gradle task
 // that discovers, generates, merges, or processes these resources.
+def verifyReleaseSigning = tasks.register('verifyReleaseSigning') {
+    doLast {
+        if (!releaseSigningPropertiesFile.isFile()) {
+            throw new GradleException(
+                "Missing external release-signing.properties file."
+            )
+        }
+
+        def requiredKeys = [
+            'storeFile', 'storePassword', 'keyAlias', 'keyPassword'
+        ]
+
+        def missingKeys = requiredKeys.findAll {
+            !releaseSigningProperties.getProperty(it)
+        }
+
+        if (!missingKeys.isEmpty()) {
+            throw new GradleException(
+                "Missing release signing properties: " + missingKeys.join(', ')
+            )
+        }
+
+        def keyFile = new File(
+            releaseSigningProperties.getProperty('storeFile')
+        )
+
+        if (!keyFile.isFile()) {
+            throw new GradleException(
+                "Release keystore does not exist: " + keyFile
+            )
+        }
+
+        logger.lifecycle("Release signing configuration verified.")
+    }
+}
+
+tasks.configureEach {
+    if (name.toLowerCase().contains('release')
+            && name != 'verifyReleaseSigning') {
+        dependsOn(verifyReleaseSigning)
+    }
+}
+
 tasks.configureEach {
     if (
         name ==~ /(?:generate|merge|process).*Resources/ ||

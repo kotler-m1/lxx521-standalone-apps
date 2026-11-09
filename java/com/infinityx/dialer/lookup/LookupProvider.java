@@ -19,6 +19,7 @@ package com.infinityx.dialer.lookup;
 
 import android.annotation.SuppressLint;
 import android.content.ContentProvider;
+import android.content.Context;
 import android.content.ContentValues;
 import android.content.UriMatcher;
 import android.database.Cursor;
@@ -43,6 +44,7 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -227,8 +229,14 @@ public class LookupProvider extends ContentProvider {
    * @return Whether location services are enabled
    */
   private boolean isLocationEnabled() {
-      LocationManager locationManager = requireContext().getSystemService(LocationManager.class);
-      return locationManager.isLocationEnabled();
+    Context context = getContext();
+    if (context == null) {
+      return false;
+    }
+
+    LocationManager locationManager =
+        context.getSystemService(LocationManager.class);
+    return locationManager != null && locationManager.isLocationEnabled();
   }
 
   /**
@@ -236,18 +244,50 @@ public class LookupProvider extends ContentProvider {
    *
    * @return The last location
    */
-  @SuppressLint("MissingPermission")
   private Location getLastLocation() {
-    LocationManager locationManager = requireContext().getSystemService(LocationManager.class);
-
-    try {
-      locationManager.getCurrentLocation(LocationManager.FUSED_PROVIDER, new CancellationSignal(),
-              Executors.newSingleThreadExecutor(), location -> {});
-
-      return locationManager.getLastKnownLocation(LocationManager.FUSED_PROVIDER);
-    } catch (IllegalArgumentException e) {
+    Context context = getContext();
+    if (context == null) {
       return null;
     }
+
+    boolean hasLocationPermission =
+        context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED
+        || context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED;
+
+    if (!hasLocationPermission) {
+      return null;
+    }
+
+    LocationManager locationManager =
+        context.getSystemService(LocationManager.class);
+
+    if (locationManager == null || !locationManager.isLocationEnabled()) {
+      return null;
+    }
+
+    Location bestLocation = null;
+
+    try {
+      for (String provider : locationManager.getProviders(true)) {
+        try {
+          Location candidate = locationManager.getLastKnownLocation(provider);
+
+          if (candidate != null
+              && (bestLocation == null
+                  || candidate.getTime() > bestLocation.getTime())) {
+            bestLocation = candidate;
+          }
+        } catch (SecurityException | IllegalArgumentException ignored) {
+          // Continue checking other available location providers.
+        }
+      }
+    } catch (SecurityException | IllegalArgumentException ignored) {
+      // Location access may have been revoked or providers may be unavailable.
+    }
+
+    return bestLocation;
   }
 
   /**
@@ -267,7 +307,11 @@ public class LookupProvider extends ContentProvider {
       return null;
     }
 
-    filter = URLDecoder.decode(filter, StandardCharsets.UTF_8);
+    try {
+      filter = URLDecoder.decode(filter, StandardCharsets.UTF_8.name());
+    } catch (UnsupportedEncodingException e) {
+      throw new IllegalStateException("UTF-8 is unavailable", e);
+    }
 
     ArrayList<ContactInfo> results = new ArrayList<>();
     if ((type == NEARBY || type == NEARBY_AND_PEOPLE) && lastLocation != null) {

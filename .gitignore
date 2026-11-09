@@ -8,3 +8,8 @@ local.properties
 *.before-*
 *.bak
 **/.gradle/
+
+# Private Android release-signing material
+*.jks
+*.keystore
+release-signing.properties

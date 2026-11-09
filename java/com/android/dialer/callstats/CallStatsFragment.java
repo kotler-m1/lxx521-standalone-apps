@@ -119,7 +119,6 @@ public class CallStatsFragment extends Fragment implements
     View view = inflater.inflate(R.layout.call_stats_fragment, container, false);
 
     mRecyclerView = view.findViewById(R.id.recycler_view);
-    mRecyclerView.setHasFixedSize(true);
     LinearLayoutManager layoutManager = new LinearLayoutManager(getActivity());
     mRecyclerView.setLayoutManager(layoutManager);
     mEmptyListView = view.findViewById(R.id.empty_list_view);

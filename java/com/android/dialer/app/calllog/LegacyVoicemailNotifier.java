@@ -21,6 +21,7 @@ import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.PersistableBundle;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
@@ -122,20 +123,37 @@ public final class LegacyVoicemailNotifier {
 
     int resId = android.R.drawable.stat_notify_voicemail;
 
-    if (pinnedTelephonyManager.getPhoneCount() > 1) {
-        SubscriptionManager subManager = context.getSystemService(SubscriptionManager.class);
-        List<SubscriptionInfo> subInfoList = subManager.getActiveSubscriptionInfoList();
-        if (handle != null && !TextUtils.isEmpty(handle.getId()) && subInfoList!= null) {
-            for (SubscriptionInfo subInfo: subInfoList) {
-                if (handle.getId().equals(subInfo.getIccId())) {
-                    int slotId = subInfo.getSimSlotIndex();
-                    resId = (slotId == 0) ? R.drawable.stat_notify_voicemail_sub1
-                            : (slotId == 1) ? R.drawable.stat_notify_voicemail_sub2
+    if (pinnedTelephonyManager.getPhoneCount() > 1
+        && context.checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE)
+            == PackageManager.PERMISSION_GRANTED) {
+      SubscriptionManager subManager =
+          context.getSystemService(SubscriptionManager.class);
+
+      if (subManager != null) {
+        try {
+          List<SubscriptionInfo> subInfoList =
+              subManager.getActiveSubscriptionInfoList();
+
+          if (handle != null
+              && !TextUtils.isEmpty(handle.getId())
+              && subInfoList != null) {
+            for (SubscriptionInfo subInfo : subInfoList) {
+              if (handle.getId().equals(subInfo.getIccId())) {
+                int slotId = subInfo.getSimSlotIndex();
+                resId =
+                    (slotId == 0)
+                        ? R.drawable.stat_notify_voicemail_sub1
+                        : (slotId == 1)
+                            ? R.drawable.stat_notify_voicemail_sub2
                             : android.R.drawable.stat_notify_voicemail;
-                    break;
-                }
+                break;
+              }
             }
+          }
+        } catch (SecurityException ignored) {
+          // Use the default voicemail icon if permission is unavailable.
         }
+      }
     }
 
     Notification.Builder builder =

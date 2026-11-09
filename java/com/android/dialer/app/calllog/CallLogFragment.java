@@ -376,7 +376,6 @@ public class CallLogFragment extends Fragment
     ItemTouchHelper itemTouchHelper = new ItemTouchHelper(simpleCallback);
     itemTouchHelper.attachToRecyclerView(recyclerView);
 
-    recyclerView.setHasFixedSize(true);
     layoutManager = new LinearLayoutManager(getActivity());
     recyclerView.setLayoutManager(layoutManager);
     emptyListView = (EmptyContentView) view.findViewById(R.id.empty_list_view);

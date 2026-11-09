@@ -19,6 +19,7 @@ package com.infinityx.dialer.lookup;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.os.Build;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.provider.ContactsContract.Contacts;
@@ -251,7 +252,11 @@ public class LookupCache {
 
     try {
       out = new FileOutputStream(image);
-      bmp.compress(Bitmap.CompressFormat.WEBP_LOSSLESS, 100, out);
+      Bitmap.CompressFormat format =
+          Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+              ? Bitmap.CompressFormat.WEBP_LOSSLESS
+              : Bitmap.CompressFormat.WEBP;
+      bmp.compress(format, 100, out);
       return Uri.fromFile(image);
     } catch (Exception e) {
       e.printStackTrace();
