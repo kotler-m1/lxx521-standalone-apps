@@ -1,6 +1,6 @@
 plugins {
-    id 'com.android.application' version '8.6.1'
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.android.application' version '9.5.2'
+    id 'com.google.protobuf' version '0.10.1'
 }
 
 // Release signing credentials are stored outside this repository.
@@ -70,15 +70,15 @@ def stageDialerProtoTask = tasks.register('stageDialerProto', Copy) {
 
 android {
     namespace 'com.android.dialer'
-    compileSdk 35
+    compileSdk 37
 
     defaultConfig {
         applicationId 'com.infinityx.dialer'
         minSdk 35
-        targetSdk 35
+        targetSdk 36
 
-        versionCode 3
-        versionName '1.0.0'
+        versionCode 4
+        versionName '1.1.0'
     }
 
     signingConfigs {
@@ -283,7 +283,7 @@ dependencies {
 def androidHome = System.getenv('ANDROID_HOME')
 if (androidHome != null) {
     def legacyHttpJar = file(
-        "${androidHome}/platforms/android-35/optional/org.apache.http.legacy.jar"
+        "${androidHome}/platforms/android-37.0/optional/org.apache.http.legacy.jar"
     )
 
     if (legacyHttpJar.exists()) {
