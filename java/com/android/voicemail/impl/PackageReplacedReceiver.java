@@ -45,6 +45,11 @@ public class PackageReplacedReceiver extends BroadcastReceiver {
   @SuppressLint({"MissingPermission", "UnsafeProtectedBroadcastReceiver"})
   @Override
   public void onReceive(Context context, Intent intent) {
+    if (intent == null
+        || !Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction())) {
+      return;
+    }
+
     VvmLog.i("PackageReplacedReceiver.onReceive", "package replaced, starting activation");
 
     if (!VoicemailComponent.get(context).getVoicemailClient().isVoicemailModuleEnabled()) {

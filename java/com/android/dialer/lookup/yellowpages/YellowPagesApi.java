@@ -21,8 +21,6 @@ import android.text.TextUtils;
 import com.infinityx.dialer.lookup.LookupUtils;
 
 import java.io.IOException;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class YellowPagesApi {
   private static final String TAG = YellowPagesApi.class.getSimpleName();
@@ -47,79 +45,139 @@ public class YellowPagesApi {
   }
 
   private String getPhotoUrl(String website) throws IOException {
-    String output = LookupUtils.httpGet(website, null);
-    String galleryRef = LookupUtils.firstRegexResult(output,
-        "href=\"([^\"]+gallery\\?lid=[^\"]+)\"", true);
+    String page = LookupUtils.httpGet(website, null);
+    String galleryRef =
+        extractQuotedValueContaining(page, "href=\"", "gallery?lid=");
     if (galleryRef == null) {
       return null;
     }
 
-    // Get first image
-    return LookupUtils.firstRegexResult(
-        LookupUtils.httpGet("https://www.yellowpages.com" + galleryRef, null),
-        "\"type\":\"image\",\"src\":\"([^\"]+)\"", true);
+    // Get first image.
+    String galleryPage =
+        LookupUtils.httpGet("https://www.yellowpages.com" + galleryRef, null);
+    return extractQuotedValueAfterMarker(
+        galleryPage, "\"type\":\"image\",\"src\":\"");
   }
 
   private String[] parseNameWebsiteUnitedStates() {
-    Pattern regexNameAndWebsite = Pattern.compile(
-        "<a href=\"([^>]+?)\"[^>]+?class=\"url[^>]+?>([^<]+)</a>",
-        Pattern.DOTALL);
-    String name = null;
-    String website = null;
-
-    Matcher m = regexNameAndWebsite.matcher(output);
-    if (m.find()) {
-      website = m.group(1).trim();
-      name = m.group(2).trim();
+    if (output == null) {
+      return new String[] { null, null };
     }
 
-    return new String[] { name, website };
+    int searchFrom = 0;
+    while (true) {
+      int anchorStart = output.indexOf("<a href=\"", searchFrom);
+      if (anchorStart < 0) {
+        break;
+      }
+
+      int hrefStart = anchorStart + 9;
+      int hrefEnd = output.indexOf('"', hrefStart);
+      int tagEnd = hrefEnd < 0 ? -1 : output.indexOf('>', hrefEnd);
+
+      if (hrefEnd > hrefStart && tagEnd >= 0) {
+        int classIndex = output.indexOf("class=\"url", hrefEnd);
+        if (classIndex >= 0 && classIndex < tagEnd) {
+          int textStart = tagEnd + 1;
+          int textEnd = output.indexOf('<', textStart);
+
+          if (textEnd > textStart) {
+            String website = output.substring(hrefStart, hrefEnd).trim();
+            String name = output.substring(textStart, textEnd).trim();
+            return new String[] { name, website };
+          }
+        }
+      }
+
+      searchFrom = tagEnd >= 0 ? tagEnd + 1 : anchorStart + 9;
+    }
+
+    return new String[] { null, null };
   }
 
-  private String[] parseNameWebsiteCanada() {
-    Pattern regexNameAndWebsite = Pattern.compile(
-        "class=\"ypgListingTitleLink utagLink\".*?href=\"(.*?)\">"
-        + "(<span\\s+class=\"listingTitle\">.*?</span>)",
-        Pattern.DOTALL);
-    String name = null;
-    String website = null;
-
-    Matcher m = regexNameAndWebsite.matcher(output);
-    if (m.find()) {
-      website = m.group(1).trim();
-      name = LookupUtils.fromHtml(m.group(2).trim());
+    private String[] parseNameWebsiteCanada() {
+    if (output == null) {
+      return new String[] { null, null };
     }
 
-    if (website != null) {
-      website = "https://www.yellowpages.ca" + website;
+    String marker = "class=\"ypgListingTitleLink utagLink\"";
+    int markerIndex = output.indexOf(marker);
+
+    if (markerIndex < 0) {
+      return new String[] { null, null };
     }
 
-    return new String[] { name, website };
+    int hrefStart = output.indexOf("href=\"", markerIndex + marker.length());
+    if (hrefStart < 0) {
+      return new String[] { null, null };
+    }
+
+    int valueStart = hrefStart + 6;
+    int valueEnd = output.indexOf('"', valueStart);
+    int tagEnd = valueEnd < 0 ? -1 : output.indexOf('>', valueEnd);
+
+    if (valueEnd < 0 || tagEnd < 0) {
+      return new String[] { null, null };
+    }
+
+    int spanStart = output.indexOf("<span", tagEnd + 1);
+    if (spanStart < 0) {
+      return new String[] { null, null };
+    }
+
+    int classStart = spanStart + 5;
+    if (classStart >= output.length()
+        || !Character.isWhitespace(output.charAt(classStart))) {
+      return new String[] { null, null };
+    }
+
+    while (classStart < output.length()
+        && Character.isWhitespace(output.charAt(classStart))) {
+      classStart++;
+    }
+
+    String expectedClass = "class=\"listingTitle\"";
+    if (!output.startsWith(expectedClass, classStart)) {
+      return new String[] { null, null };
+    }
+
+    int spanTagEnd = classStart + expectedClass.length();
+    if (spanTagEnd >= output.length() || output.charAt(spanTagEnd) != '>') {
+      return new String[] { null, null };
+    }
+
+    int spanEnd = output.indexOf("</span>", spanTagEnd + 1);
+    if (spanEnd < 0) {
+      return new String[] { null, null };
+    }
+
+    String website = output.substring(valueStart, valueEnd).trim();
+    String title = output.substring(spanStart, spanEnd + 7).trim();
+    String name = LookupUtils.fromHtml(title);
+
+    return new String[] {
+        name,
+        "https://www.yellowpages.ca" + website
+    };
   }
 
-  private String parseNumberUnitedStates() {
-    return LookupUtils.firstRegexResult(output,
-        "business-phone.*?>\n*([^\n<]+)\n*<", true);
+    private String parseNumberUnitedStates() {
+    return extractLineTextAfterMarker(output, "business-phone");
   }
 
   private String parseNumberCanada() {
-    return LookupUtils.firstRegexResult(output,
-        "<div\\s+class=\"phoneNumber\">(.*?)</div>", true);
+    return extractDivContentByClass(output, "phoneNumber");
   }
 
   private String parseAddressUnitedStates() {
-    String addressStreet = LookupUtils.firstRegexResult(output,
-        "street-address.*?>\n*([^\n<]+)\n*<", true);
+    String addressStreet = extractLineTextAfterMarker(output, "street-address");
     if (addressStreet != null && addressStreet.endsWith(",")) {
       addressStreet = addressStreet.substring(0, addressStreet.length() - 1);
     }
 
-    String addressCity = LookupUtils.firstRegexResult(output,
-        "locality.*?>\n*([^\n<]+)\n*<", true);
-    String addressState = LookupUtils.firstRegexResult(output,
-        "region.*?>\n*([^\n<]+)\n*<", true);
-    String addressZip = LookupUtils.firstRegexResult(output,
-        "postal-code.*?>\n*([^\n<]+)\n*<", true);
+    String addressCity = extractLineTextAfterMarker(output, "locality");
+    String addressState = extractLineTextAfterMarker(output, "region");
+    String addressZip = extractLineTextAfterMarker(output, "postal-code");
 
     StringBuilder sb = new StringBuilder();
 
@@ -144,13 +202,159 @@ public class YellowPagesApi {
   }
 
   private String parseAddressCanada() {
-    String address = LookupUtils.firstRegexResult(output,
-        "<div\\s+class=\"address\">(.*?)</div>", true);
-    return LookupUtils.fromHtml(address);
+    return LookupUtils.fromHtml(extractDivContentByClass(output, "address"));
+  }
+
+  private static String extractQuotedValueContaining(
+      String input, String marker, String requiredPart) {
+    if (input == null) {
+      return null;
+    }
+
+    int searchFrom = 0;
+    while (searchFrom < input.length()) {
+      int markerIndex = input.indexOf(marker, searchFrom);
+      if (markerIndex < 0) {
+        return null;
+      }
+
+      int valueStart = markerIndex + marker.length();
+      int valueEnd = input.indexOf('"', valueStart);
+
+      if (valueEnd > valueStart) {
+        String value = input.substring(valueStart, valueEnd).trim();
+        int requiredIndex = value.indexOf(requiredPart);
+
+        if (requiredIndex > 0
+            && requiredIndex + requiredPart.length() < value.length()) {
+          return value;
+        }
+      }
+
+      searchFrom = valueStart;
+    }
+
+    return null;
+  }
+
+  private static String extractQuotedValueAfterMarker(String input, String marker) {
+    if (input == null) {
+      return null;
+    }
+
+    int searchFrom = 0;
+    while (searchFrom < input.length()) {
+      int markerIndex = input.indexOf(marker, searchFrom);
+      if (markerIndex < 0) {
+        return null;
+      }
+
+      int valueStart = markerIndex + marker.length();
+      int valueEnd = input.indexOf('"', valueStart);
+
+      if (valueEnd > valueStart) {
+        return input.substring(valueStart, valueEnd).trim();
+      }
+
+      searchFrom = valueStart;
+    }
+
+    return null;
+  }
+
+  private static String extractLineTextAfterMarker(String input, String marker) {
+    if (input == null) {
+      return null;
+    }
+
+    int searchFrom = 0;
+    while (searchFrom < input.length()) {
+      int markerIndex = input.indexOf(marker, searchFrom);
+      if (markerIndex < 0) {
+        return null;
+      }
+
+      int tagEnd = input.indexOf('>', markerIndex + marker.length());
+      if (tagEnd < 0) {
+        return null;
+      }
+
+      int valueStart = tagEnd + 1;
+      while (valueStart < input.length() && input.charAt(valueStart) == '\n') {
+        valueStart++;
+      }
+
+      int valueEnd = valueStart;
+      while (valueEnd < input.length()
+          && input.charAt(valueEnd) != '\n'
+          && input.charAt(valueEnd) != '<') {
+        valueEnd++;
+      }
+
+      int closingTagStart = valueEnd;
+      while (closingTagStart < input.length()
+          && input.charAt(closingTagStart) == '\n') {
+        closingTagStart++;
+      }
+
+      if (valueEnd > valueStart
+          && closingTagStart < input.length()
+          && input.charAt(closingTagStart) == '<') {
+        return input.substring(valueStart, valueEnd).trim();
+      }
+
+      searchFrom = markerIndex + marker.length();
+    }
+
+    return null;
+  }
+
+  private static String extractDivContentByClass(String input, String className) {
+    if (input == null) {
+      return null;
+    }
+
+    String marker = "class=\"" + className + "\"";
+    int searchFrom = 0;
+
+    while (searchFrom < input.length()) {
+      int classIndex = input.indexOf(marker, searchFrom);
+      if (classIndex < 0) {
+        return null;
+      }
+
+      int divStart = input.lastIndexOf("<div", classIndex);
+      int prefixStart = divStart < 0 ? -1 : divStart + 4;
+      int classEnd = classIndex + marker.length();
+
+      if (prefixStart >= 0
+          && classIndex > prefixStart
+          && isWhitespaceOnly(input, prefixStart, classIndex)
+          && input.startsWith(">", classEnd)) {
+        int contentStart = classEnd + 1;
+        int contentEnd = input.indexOf("</div>", contentStart);
+
+        if (contentEnd >= 0) {
+          return input.substring(contentStart, contentEnd).trim();
+        }
+      }
+
+      searchFrom = classEnd;
+    }
+
+    return null;
+  }
+
+  private static boolean isWhitespaceOnly(String input, int start, int end) {
+    for (int i = start; i < end; i++) {
+      if (!Character.isWhitespace(input.charAt(i))) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private void buildContactInfo() throws IOException {
-    Matcher m;
 
     String name = null;
     String website = null;

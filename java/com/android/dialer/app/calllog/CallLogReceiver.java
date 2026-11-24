@@ -44,7 +44,7 @@ public class CallLogReceiver extends BroadcastReceiver {
       PendingResult pendingResult = goAsync();
       VisualVoicemailUpdateTask.scheduleTask(context, pendingResult::finish);
     } else {
-      LogUtil.w("CallLogReceiver.onReceive", "could not handle: " + intent);
+      LogUtil.w("CallLogReceiver.onReceive", "could not handle: %s", intent);
     }
   }
 

@@ -40,21 +40,13 @@ public class ZabaSearchApi {
   }
 
   private void buildContactInfo() {
-    // Name
-    String name = LookupUtils.firstRegexResult(output,
-        "itemprop=\"?name\"?>([^<]+)<", true);
-    // Formatted phone number
-    String phoneNumber = LookupUtils.firstRegexResult(output,
-        "itemprop=\"?telephone\"?>([^<]+)<", true);
-    // Address
-    String addressStreet = LookupUtils.firstRegexResult(output,
-        "itemprop=\"?streetAddress\"?>([^<]+?)(&nbsp;)*<", true);
-    String addressCity = LookupUtils.firstRegexResult(output,
-        "itemprop=\"?addressLocality\"?>([^<]+)<", true);
-    String addressState = LookupUtils.firstRegexResult(output,
-        "itemprop=\"?addressRegion\"?>([^<]+)<", true);
-    String addressZip = LookupUtils.firstRegexResult(output,
-        "itemprop=\"?postalCode\"?>([^<]+)<", true);
+    // Extract values from the fixed itemprop attributes without regular expressions.
+    String name = extractItemPropValue(output, "name", false);
+    String phoneNumber = extractItemPropValue(output, "telephone", false);
+    String addressStreet = extractItemPropValue(output, "streetAddress", true);
+    String addressCity = extractItemPropValue(output, "addressLocality", false);
+    String addressState = extractItemPropValue(output, "addressRegion", false);
+    String addressZip = extractItemPropValue(output, "postalCode", false);
 
     StringBuilder sb = new StringBuilder();
 
@@ -76,7 +68,7 @@ public class ZabaSearchApi {
 
     String address = sb.toString();
     if (address.isEmpty()) {
-        address = null;
+      address = null;
     }
 
     info = new ContactInfo();
@@ -84,6 +76,59 @@ public class ZabaSearchApi {
     info.address = address;
     info.formattedNumber = number;
     info.website = LOOKUP_URL + info.formattedNumber;
+  }
+
+  private static String extractItemPropValue(
+      String input, String property, boolean stripTrailingNbsp) {
+    if (input == null) {
+      return null;
+    }
+
+    String quotedMarker = "itemprop=\"" + property + "\">";
+    String unquotedMarker = "itemprop=" + property + ">";
+    int searchFrom = 0;
+
+    while (searchFrom < input.length()) {
+      int quotedIndex = input.indexOf(quotedMarker, searchFrom);
+      int unquotedIndex = input.indexOf(unquotedMarker, searchFrom);
+
+      int markerIndex;
+      int markerLength;
+
+      if (quotedIndex < 0 && unquotedIndex < 0) {
+        return null;
+      } else if (quotedIndex < 0
+          || (unquotedIndex >= 0 && unquotedIndex < quotedIndex)) {
+        markerIndex = unquotedIndex;
+        markerLength = unquotedMarker.length();
+      } else {
+        markerIndex = quotedIndex;
+        markerLength = quotedMarker.length();
+      }
+
+      int valueStart = markerIndex + markerLength;
+      int valueEnd = input.indexOf('<', valueStart);
+
+      if (valueEnd < 0) {
+        return null;
+      }
+
+      String value = input.substring(valueStart, valueEnd).trim();
+
+      if (stripTrailingNbsp) {
+        while (value.endsWith("&nbsp;")) {
+          value = value.substring(0, value.length() - "&nbsp;".length()).trim();
+        }
+      }
+
+      if (!value.isEmpty()) {
+        return value;
+      }
+
+      searchFrom = valueEnd + 1;
+    }
+
+    return null;
   }
 
   public ContactInfo getContactInfo() throws IOException {

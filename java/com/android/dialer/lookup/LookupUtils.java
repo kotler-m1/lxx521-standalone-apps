@@ -30,20 +30,24 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.UnsupportedCharsetException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class LookupUtils {
   private static final String USER_AGENT =
       "Mozilla/5.0 (X11; Linux x86_64; rv:42.0) Gecko/20100101 Firefox/42.0";
 
+  private static final int CONNECT_TIMEOUT_MS = 15_000;
+  private static final int READ_TIMEOUT_MS = 20_000;
+  private static final int MAX_TEXT_RESPONSE_BYTES = 2 * 1024 * 1024;
+  private static final int MAX_BINARY_RESPONSE_BYTES = 8 * 1024 * 1024;
+
   private static HttpURLConnection prepareHttpConnection(String url, Map<String, String> headers)
       throws IOException {
     // open connection
     HttpURLConnection urlConnection = (HttpURLConnection) new URL(url).openConnection();
+    urlConnection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+    urlConnection.setReadTimeout(READ_TIMEOUT_MS);
+
     // set user agent (default value is null)
     urlConnection.setRequestProperty("User-Agent", USER_AGENT);
     // set all other headers if not null
@@ -56,24 +60,30 @@ public class LookupUtils {
     return urlConnection;
   }
 
-  private static byte[] httpFetch(HttpURLConnection urlConnection) throws IOException {
-    // query url, read and return buffered response body
-    // we want to make sure that the connection gets closed here
-    InputStream is = new BufferedInputStream(urlConnection.getInputStream());
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    byte[] result = null;
-    try {
+  private static byte[] httpFetch(
+      HttpURLConnection urlConnection, int maxResponseBytes) throws IOException {
+    int contentLength = urlConnection.getContentLength();
+    if (contentLength > maxResponseBytes) {
+      throw new IOException("HTTP response exceeds maximum allowed size");
+    }
+
+    try (InputStream is = new BufferedInputStream(urlConnection.getInputStream());
+        ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
       byte[] partial = new byte[4096];
       int read;
-      while ((read = is.read(partial, 0, 4096)) != -1) {
+      int totalBytes = 0;
+
+      while ((read = is.read(partial)) != -1) {
+        if (read > maxResponseBytes - totalBytes) {
+          throw new IOException("HTTP response exceeds maximum allowed size");
+        }
+
         baos.write(partial, 0, read);
+        totalBytes += read;
       }
-      result = baos.toByteArray();
-    } finally {
-      is.close();
-      baos.close();
+
+      return baos.toByteArray();
     }
-    return result;
   }
 
   private static Charset determineCharset(HttpURLConnection connection) {
@@ -97,7 +107,7 @@ public class LookupUtils {
   public static String httpGet(String url, Map<String, String> headers) throws IOException {
     HttpURLConnection connection = prepareHttpConnection(url, headers);
     try {
-      byte[] response = httpFetch(connection);
+      byte[] response = httpFetch(connection, MAX_TEXT_RESPONSE_BYTES);
       return new String(response, determineCharset(connection));
     } finally {
       connection.disconnect();
@@ -107,7 +117,7 @@ public class LookupUtils {
   public static byte[] httpGetBytes(String url, Map<String, String> headers) throws IOException {
     HttpURLConnection connection = prepareHttpConnection(url, headers);
     try {
-      return httpFetch(connection);
+      return httpFetch(connection, MAX_BINARY_RESPONSE_BYTES);
     } finally {
       connection.disconnect();
     }
@@ -130,34 +140,11 @@ public class LookupUtils {
           bw.close();
         }
       }
-      byte[] response = httpFetch(connection);
+      byte[] response = httpFetch(connection, MAX_TEXT_RESPONSE_BYTES);
       return new String(response, determineCharset(connection));
     } finally {
       connection.disconnect();
     }
-  }
-
-  public static List<String> allRegexResults(String input, String regex, boolean dotall) {
-    if (input == null) {
-      return null;
-    }
-    Pattern pattern = Pattern.compile(regex, dotall ? Pattern.DOTALL : 0);
-    Matcher matcher = pattern.matcher(input);
-
-    List<String> regexResults = new ArrayList<>();
-    while (matcher.find()) {
-      regexResults.add(matcher.group(1).trim());
-    }
-    return regexResults;
-  }
-
-  public static String firstRegexResult(String input, String regex, boolean dotall) {
-    if (input == null) {
-      return null;
-    }
-    Pattern pattern = Pattern.compile(regex, dotall ? Pattern.DOTALL : 0);
-    Matcher m = pattern.matcher(input);
-    return m.find() ? m.group(1).trim() : null;
   }
 
   public static String fromHtml(String input) {

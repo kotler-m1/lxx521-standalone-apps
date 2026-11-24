@@ -21,7 +21,6 @@ import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
-import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.text.TextUtils;
 
@@ -41,7 +40,14 @@ import com.google.common.collect.ImmutableMap;
  */
 public class PreferredSimFallbackProvider extends ContentProvider {
 
-  private static final String UPDATE_ID_SELECTION = PreferredSim.DATA_ID + " = ?";
+  private static final String QUERY_ID_SELECTION = PreferredSim.DATA_ID + " = ?";
+
+  private static final String UPDATE_ID_SELECTION = QUERY_ID_SELECTION;
+
+  private static final String[] QUERY_PROJECTION = {
+    PreferredSim.PREFERRED_PHONE_ACCOUNT_COMPONENT_NAME,
+    PreferredSim.PREFERRED_PHONE_ACCOUNT_ID
+  };
 
   private static final ImmutableMap<String, String> PROJECTION_MAP =
       ImmutableMap.of(
@@ -68,19 +74,31 @@ public class PreferredSimFallbackProvider extends ContentProvider {
       @Nullable String selection,
       @Nullable String[] selectionArgs,
       @Nullable String sortOrder) {
+
+    if (!PreferredSimFallbackContract.CONTENT_URI.equals(uri)) {
+      throw new IllegalArgumentException("Unsupported URI");
+    }
+
     checkReadContactsPermission();
-    SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
-    queryBuilder.setStrict(true);
-    queryBuilder.setProjectionMap(PROJECTION_MAP);
-    queryBuilder.setTables(PreferredSimDatabaseHelper.TABLE);
-    return queryBuilder.query(
-        databaseHelper.getReadableDatabase(),
-        projection,
-        selection,
-        selectionArgs,
+
+    if (!isSupportedProjection(projection)
+        || !QUERY_ID_SELECTION.equals(selection)
+        || selectionArgs == null
+        || selectionArgs.length != 1
+        || sortOrder != null) {
+      throw new IllegalArgumentException("Unsupported query");
+    }
+
+    long dataId = parseDataId(selectionArgs[0]);
+
+    return databaseHelper.getReadableDatabase().query(
+        PreferredSimDatabaseHelper.TABLE,
+        QUERY_PROJECTION,
+        QUERY_ID_SELECTION,
+        new String[] {Long.toString(dataId)},
         null,
         null,
-        sortOrder);
+        null);
   }
 
   @Nullable
@@ -108,21 +126,20 @@ public class PreferredSimFallbackProvider extends ContentProvider {
       @NonNull Uri uri, @Nullable String selection, @Nullable String[] selectionArgs) {
     checkWriteContactsPermission();
 
-    if (PreferredSimFallbackContract.CONTENT_URI.equals(uri)
-        && selection == null
-        && selectionArgs == null) {
-      return databaseHelper
-          .getWritableDatabase()
-          .delete(PreferredSimDatabaseHelper.TABLE, null, null);
+    if (!TextUtils.equals(getContext().getPackageName(), getCallingPackage())) {
+      throw new SecurityException(
+          "Only the Dialer can delete preferred SIM preferences");
     }
 
-    if (!TextUtils.equals(getContext().getPackageName(), getCallingPackage())) {
+    if (!PreferredSimFallbackContract.CONTENT_URI.equals(uri)
+        || selection != null
+        || selectionArgs != null) {
       throw new IllegalArgumentException("Unsupported operation");
     }
 
     return databaseHelper
         .getWritableDatabase()
-        .delete(PreferredSimDatabaseHelper.TABLE, selection, selectionArgs);
+        .delete(PreferredSimDatabaseHelper.TABLE, null, null);
   }
 
   /**
@@ -142,22 +159,94 @@ public class PreferredSimFallbackProvider extends ContentProvider {
       @Nullable ContentValues values,
       @Nullable String selection,
       @Nullable String[] selectionArgs) {
+
     checkWriteContactsPermission();
+
+    if (!PreferredSimFallbackContract.CONTENT_URI.equals(uri)) {
+      throw new IllegalArgumentException("Unsupported URI");
+    }
+
     if (values == null) {
       return 0;
     }
+
     if (!UPDATE_ID_SELECTION.equals(selection)
         || selectionArgs == null
-        || selectionArgs.length != 1) {
-      throw new IllegalArgumentException("Unsupported operation");
+        || selectionArgs.length != 1
+        || values.size() != 2
+        || !values.containsKey(PreferredSim.PREFERRED_PHONE_ACCOUNT_COMPONENT_NAME)
+        || !values.containsKey(PreferredSim.PREFERRED_PHONE_ACCOUNT_ID)) {
+      throw new IllegalArgumentException("Unsupported update");
     }
-    values.put(PreferredSim.DATA_ID, selectionArgs[0]);
-    if (databaseHelper.getWritableDatabase().replace(PreferredSimDatabaseHelper.TABLE, null, values)
-        == -1) {
+
+    long dataId = parseDataId(selectionArgs[0]);
+
+    Object componentName =
+        values.get(PreferredSim.PREFERRED_PHONE_ACCOUNT_COMPONENT_NAME);
+    Object accountId =
+        values.get(PreferredSim.PREFERRED_PHONE_ACCOUNT_ID);
+
+    if ((componentName != null && !(componentName instanceof String))
+        || (accountId != null && !(accountId instanceof String))) {
+      throw new IllegalArgumentException("Invalid preferred SIM values");
+    }
+
+    ContentValues safeValues = new ContentValues(3);
+    safeValues.put(PreferredSim.DATA_ID, dataId);
+
+    if (componentName == null) {
+      safeValues.putNull(PreferredSim.PREFERRED_PHONE_ACCOUNT_COMPONENT_NAME);
+    } else {
+      safeValues.put(
+          PreferredSim.PREFERRED_PHONE_ACCOUNT_COMPONENT_NAME,
+          (String) componentName);
+    }
+
+    if (accountId == null) {
+      safeValues.putNull(PreferredSim.PREFERRED_PHONE_ACCOUNT_ID);
+    } else {
+      safeValues.put(PreferredSim.PREFERRED_PHONE_ACCOUNT_ID, (String) accountId);
+    }
+
+    if (databaseHelper.getWritableDatabase().replace(
+        PreferredSimDatabaseHelper.TABLE, null, safeValues) == -1) {
       throw new IllegalStateException("update failed");
     }
-    getContext().getContentResolver().notifyChange(PreferredSimFallbackContract.CONTENT_URI, null);
+
+    getContext().getContentResolver().notifyChange(
+        PreferredSimFallbackContract.CONTENT_URI, null);
+
     return 1;
+  }
+
+  private static boolean isSupportedProjection(@Nullable String[] projection) {
+    if (projection == null || projection.length != QUERY_PROJECTION.length) {
+      return false;
+    }
+
+    for (int i = 0; i < QUERY_PROJECTION.length; i++) {
+      if (!QUERY_PROJECTION[i].equals(projection[i])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private static long parseDataId(@Nullable String value) {
+    if (value == null) {
+      throw new IllegalArgumentException("Missing preferred SIM data ID");
+    }
+
+    try {
+      long dataId = Long.parseLong(value);
+      if (dataId <= 0) {
+        throw new IllegalArgumentException("Invalid preferred SIM data ID");
+      }
+      return dataId;
+    } catch (NumberFormatException e) {
+      throw new IllegalArgumentException("Invalid preferred SIM data ID", e);
+    }
   }
 
   private void checkReadContactsPermission() {

@@ -30,34 +30,34 @@ public class TelefonbuchApi {
   private static final String REVERSE_LOOKUP_URL =
           "https://www.dastelefonbuch.de/R%C3%BCckw%C3%A4rts-Suche/";
 
-  private static final String RELEVANT_CONTENT_REGEX =
-          "<div class=\"vcard\">(.*)<div class=\"additional\">";
-  private static final String NAME_REGEX ="<div class=\"name\" title=\"(.*?)\">";
-  private static final String NUMBER_REGEX = "<!-- phoneTo: (.*?) -->";
-  private static final String ADDRESS_REGEX = "<address.*?>\n?(.*?)</address>";
-  private static final String WEBSITE_REGEX = "<div.*class=\"url\">.*<a.*?href=\"(.*?)\"";
-
   private TelefonbuchApi() {
   }
 
   public static ContactInfo reverseLookup(Context context, String number) throws IOException {
     Uri uri = Uri.parse(REVERSE_LOOKUP_URL)
-            .buildUpon()
-            .appendPath(number)
-            .build();
-    // Cut out everything we're not interested in (scripts etc.) to
-    // speed up the subsequent matching.
-    String output = LookupUtils.firstRegexResult(
-            LookupUtils.httpGet(uri.toString(), null), RELEVANT_CONTENT_REGEX, true);
+        .buildUpon()
+        .appendPath(number)
+        .build();
 
-    String name = parseValue(output, NAME_REGEX, true, false);
+    String page = LookupUtils.httpGet(uri.toString(), null);
+    String output = extractRelevantContent(page);
+
+    String name = LookupUtils.fromHtml(
+        extractBetween(output, "<div class=\"name\" title=\"", "\">"));
     if (name == null) {
       return null;
     }
 
-    String phoneNumber = parseValue(output, NUMBER_REGEX, false, true);
-    String address = parseValue(output, ADDRESS_REGEX, true, true);
-    String website = parseValue(output, WEBSITE_REGEX, true, false);
+    String phoneNumberValue =
+        extractBetween(output, "<!-- phoneTo: ", " -->");
+    if (phoneNumberValue != null) {
+      phoneNumberValue = removeHiddenSpans(phoneNumberValue);
+      phoneNumberValue = removeSpanTags(phoneNumberValue);
+    }
+    String phoneNumber = LookupUtils.fromHtml(phoneNumberValue);
+
+    String address = extractAddress(output);
+    String website = extractWebsite(output);
 
     ContactInfo info = new ContactInfo();
     info.name = name;
@@ -68,16 +68,162 @@ public class TelefonbuchApi {
     return info;
   }
 
-  private static String parseValue(String output, String regex,
-      boolean dotall, boolean removeSpans) {
-    String result = LookupUtils.firstRegexResult(output, regex, dotall);
-    if (result != null && removeSpans) {
-      // completely remove hidden spans (including contents) ...
-      result = result.replaceAll("<span class=\"hide\".*?\\/span>", "");
-      // ... and remove span wrappers around data content
-      result = result.replaceAll("</?span.*?>", "");
+  private static String extractRelevantContent(String page) {
+    if (page == null) {
+      return null;
     }
-    return LookupUtils.fromHtml(result);
+
+    String startMarker = "<div class=\"vcard\">";
+    String endMarker = "<div class=\"additional\">";
+
+    int start = page.indexOf(startMarker);
+    int end = page.lastIndexOf(endMarker);
+
+    if (start < 0 || end < start + startMarker.length()) {
+      return null;
+    }
+
+    return page.substring(start + startMarker.length(), end);
+  }
+
+  private static String extractBetween(
+      String input, String startMarker, String endMarker) {
+    if (input == null) {
+      return null;
+    }
+
+    int start = input.indexOf(startMarker);
+    if (start < 0) {
+      return null;
+    }
+
+    start += startMarker.length();
+    int end = input.indexOf(endMarker, start);
+
+    return end < start ? null : input.substring(start, end).trim();
+  }
+
+  private static String extractAddress(String input) {
+    if (input == null) {
+      return null;
+    }
+
+    int tagStart = input.indexOf("<address");
+    if (tagStart < 0) {
+      return null;
+    }
+
+    int tagEnd = input.indexOf('>', tagStart);
+    if (tagEnd < 0) {
+      return null;
+    }
+
+    int contentStart = tagEnd + 1;
+    if (contentStart < input.length() && input.charAt(contentStart) == '\n') {
+      contentStart++;
+    }
+
+    int contentEnd = input.indexOf("</address>", contentStart);
+    if (contentEnd < 0) {
+      return null;
+    }
+
+    String address = input.substring(contentStart, contentEnd);
+    address = removeHiddenSpans(address);
+    address = removeSpanTags(address);
+
+    return LookupUtils.fromHtml(address);
+  }
+
+  private static String extractWebsite(String input) {
+    if (input == null) {
+      return null;
+    }
+
+    String marker = "class=\"url\">";
+    int searchFrom = input.length();
+
+    while (searchFrom > 0) {
+      int classIndex = input.lastIndexOf(marker, searchFrom - 1);
+      if (classIndex < 0) {
+        return null;
+      }
+
+      int anchorStart = input.indexOf("<a", classIndex + marker.length());
+      if (anchorStart >= 0) {
+        int hrefStart = input.indexOf("href=\"", anchorStart);
+        if (hrefStart >= 0) {
+          hrefStart += "href=\"".length();
+          int hrefEnd = input.indexOf('"', hrefStart);
+          if (hrefEnd > hrefStart) {
+            return input.substring(hrefStart, hrefEnd).trim();
+          }
+        }
+      }
+
+      searchFrom = classIndex;
+    }
+
+    return null;
+  }
+
+  // Remove hidden spans, including their contents, without a regular expression.
+  private static String removeHiddenSpans(String input) {
+    StringBuilder result = new StringBuilder(input.length());
+    int position = 0;
+
+    while (position < input.length()) {
+      int start = input.indexOf("<span class=\"hide\"", position);
+      if (start < 0) {
+        break;
+      }
+
+      int end = input.indexOf("</span>", start);
+      if (end < 0) {
+        break;
+      }
+
+      result.append(input, position, start);
+      position = end + "</span>".length();
+    }
+
+    result.append(input, position, input.length());
+    return result.toString();
+  }
+
+  // Remove span tags while retaining their contents.
+  private static String removeSpanTags(String input) {
+    StringBuilder result = new StringBuilder(input.length());
+    int position = 0;
+
+    while (position < input.length()) {
+      int openingTag = input.indexOf("<span", position);
+      int closingTag = input.indexOf("</span", position);
+
+      int tagStart;
+      if (openingTag < 0) {
+        tagStart = closingTag;
+      } else if (closingTag < 0) {
+        tagStart = openingTag;
+      } else {
+        tagStart = Math.min(openingTag, closingTag);
+      }
+
+      if (tagStart < 0) {
+        break;
+      }
+
+      int tagEnd = input.indexOf('>', tagStart);
+      if (tagEnd < 0) {
+        break;
+      }
+
+      result.append(input, position, tagStart);
+      position = tagEnd + 1;
+    }
+
+    result.append(input, position, input.length());
+    return result.toString();
   }
 
   public static class ContactInfo {
