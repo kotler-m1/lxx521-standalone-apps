@@ -523,7 +523,7 @@ public abstract class BaseAccountType extends AccountType {
           addKind(kind);
         }
       } else {
-        LogUtil.i("BaseAccountType.parseEditSchema", "Skipping unknown tag " + tag);
+        LogUtil.i("BaseAccountType.parseEditSchema", "Skipping unknown tag %s", tag);
       }
     }
   }
